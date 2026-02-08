@@ -81,7 +81,7 @@ stages:
           git config --global user.name "Azure DevOps Pipeline"
 
           echo "Cloning GitOps repo..."
-          GIT_URL="https://x:${GITOPS_PAT_SECRET}@dev.azure.com/Learnazure162022/AzureDevOps/_git/gitops-repo" 
+          GIT_URL="https://x:${GITOPS_PAT_SECRET}@dev.azure.com/sashcell/_git/Demo-App"
 
           # x: A placeholder username, In Azure DevOps, username can be anything when using PAT.
           # ${GITOPS_PAT_SECRET} This is your PAT (Personal Access Token), stored as a secret variable in Azure DevOps:
