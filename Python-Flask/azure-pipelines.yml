@@ -5,12 +5,12 @@ variables:
   imageName: 'demo-app'
   acrRegistry: 'argocd211.azurecr.io'
 
-# 🔥 USE SELF-HOSTED MAC AGENT POOL
+# 🔥 Use self-hosted Mac ARM agent
 pool:
   name: 'sashcell'
   demands:
     - Agent.OS -equals Darwin
-    # Optional but explicit: ensures this only runs on macOS agents
+    - Agent.OSArchitecture -equals ARM64  # Ensure native Apple Silicon
 
 # -----------------------------------
 # STAGE 1 — Build & Push Docker Image
@@ -24,16 +24,25 @@ stages:
     steps:
     - checkout: self
 
+    # Debug step to verify architecture
+    - script: |
+        echo "Agent architecture:"
+        uname -m
+        docker version
+      displayName: "Verify Agent & Docker Architecture"
+
     - task: Docker@2
-      displayName: Build and Push Image to ACR
+      displayName: "Build & Push Docker Image (ARM64)"
       inputs:
         containerRegistry: argocd-acr
         repository: $(imageName)
         command: buildAndPush
         Dockerfile: Dockerfile
+        buildContext: .
         tags: |
           $(Build.BuildId)
           latest
+        arguments: --platform=linux/arm64  # Force ARM64 build
 
     - task: Bash@3
       name: SetImageTag
@@ -67,6 +76,8 @@ stages:
       inputs:
         targetType: inline
         script: |
+          set -e
+
           export GIT_CLONE_DIR="gitops-local"
           export K8S_DEPLOYMENT_PATH="k8s/deployment.yaml"
 
@@ -79,7 +90,7 @@ stages:
           git checkout main
 
           FULL_IMAGE="$(acrRegistry)/$(imageName):$(imageTag)"
-          sed -i "s|image: .*|image: ${FULL_IMAGE}|" $K8S_DEPLOYMENT_PATH
+          sed -i "" "s|image: .*|image: ${FULL_IMAGE}|" $K8S_DEPLOYMENT_PATH  # macOS sed requires "" for inline edit
 
           git add $K8S_DEPLOYMENT_PATH
           git commit -m "Update image to ${FULL_IMAGE} via Azure Pipeline"
