@@ -1,20 +1,17 @@
 trigger:
-- main
-
+  branches:
+    include:
+    - main
 variables:
-  imageName: 'demo-app'
-  acrRegistry: 'argocd211.azurecr.io'
-
-# 🔥 Use self-hosted Mac ARM agent
+- name: imageName
+  value: 'demo-app'
+- name: acrRegistry
+  value: 'argocd211.azurecr.io'
 pool:
   name: 'sashcell'
   demands:
-    - Agent.OS -equals Darwin
-    - Agent.OSArchitecture -equals ARM64  # Ensure native Apple Silicon
-
-# -----------------------------------
-# STAGE 1 — Build & Push Docker Image
-# -----------------------------------
+  - Agent.OS -equals Darwin
+  - Agent.OSArchitecture -equals ARM64
 stages:
 - stage: BuildAndPush
   displayName: "CI — Build & Push Image"
@@ -22,15 +19,16 @@ stages:
   - job: BuildJob
     displayName: "Build & Push Image to ACR"
     steps:
-    - checkout: self
-
-    # Debug step to verify architecture
-    - script: |
-        echo "Agent architecture:"
-        uname -m
-        docker version
+    - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+      inputs:
+        repository: self
+    - task: CmdLine@2
       displayName: "Verify Agent & Docker Architecture"
-
+      inputs:
+        script: |
+          echo "Agent architecture:"
+          uname -m
+          docker version
     - task: Docker@2
       displayName: "Build & Push Docker Image (ARM64)"
       inputs:
@@ -42,8 +40,7 @@ stages:
         tags: |
           $(Build.BuildId)
           latest
-        arguments: --platform=linux/arm64  # Force ARM64 build
-
+        arguments: --platform=linux/arm64
     - task: Bash@3
       name: SetImageTag
       displayName: "Set Image Tag Output"
@@ -51,24 +48,22 @@ stages:
         targetType: inline
         script: |
           echo "##vso[task.setvariable variable=imageTag;isOutput=true]$(Build.BuildId)"
-
-# -----------------------------------
-# STAGE 2 — Update GitOps Repo
-# -----------------------------------
 - stage: UpdateGitOps
   displayName: "CD — Update GitOps Repo"
-  dependsOn: BuildAndPush
+  dependsOn:
+  - BuildAndPush
   condition: succeeded()
-
   variables:
-    imageTag: $[ stageDependencies.BuildAndPush.BuildJob.outputs['SetImageTag.imageTag'] ]
-
+  - name: imageTag
+    value: $[ stageDependencies.BuildAndPush.BuildJob.outputs['SetImageTag.imageTag'] ]
   jobs:
   - job: UpdateGitOpsJob
     displayName: "Commit Updated Image Tag to GitOps Repo"
     steps:
-    - checkout: none
-
+    - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+      condition: false
+      inputs:
+        repository: none
     - task: Bash@3
       displayName: "Clone & Update GitOps Repo"
       env:
@@ -79,12 +74,12 @@ stages:
           set -e
 
           export GIT_CLONE_DIR="gitops-local"
-          export K8S_DEPLOYMENT_PATH="k8s/deployment.yaml"
+          export K8S_DEPLOYMENT_PATH="gitops-repo/k8s/deployment.yaml"
 
           git config --global user.email "pipeline@devops.com"
           git config --global user.name "Azure DevOps Pipeline"
 
-          GIT_URL="https://x:${GITOPS_PAT_SECRET}@dev.azure.com/sashcell/Demo-App/_git/gitops-repo"
+          GIT_URL="https://x:${GITOPS_PAT_SECRET}@dev.azure.com/sashcell/Demo-App/_git/Demo-App"
           git clone $GIT_URL $GIT_CLONE_DIR
           cd $GIT_CLONE_DIR
           git checkout main
